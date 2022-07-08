@@ -33,6 +33,8 @@ class TableToAscii:
         self.__style = options.style
         self.__first_col_heading = options.first_col_heading
         self.__last_col_heading = options.last_col_heading
+        self.__max_size = options.max_size
+        self.size = 0
 
         # calculate number of columns
         self.__columns = self.__count_columns()
@@ -196,6 +198,10 @@ class TableToAscii:
             # don't use separation row if it's only space
             if isinstance(filler, str) and output.strip() == "":
                 output = ""
+
+        self.row_size = len(output)
+        self.size += self.row_size
+
         return output
 
     def __top_edge_to_ascii(self) -> str:
@@ -265,48 +271,71 @@ class TableToAscii:
         Returns:
             str: The body of the ascii table
         """
-        separation_row = self.__row_to_ascii(
+        tables = [""]
+        size_before = self.size
+
+        separation_row_left = self.__row_to_ascii(
             left_edge=self.__style.row_left_tee,
             heading_col_sep=self.__style.heading_col_row_cross,
             column_seperator=self.__style.col_row_cross,
             right_edge=self.__style.row_right_tee,
             filler=self.__style.row_sep,
         )
-        return separation_row.join(
-            self.__row_to_ascii(
+
+        i = 0
+        for row in body:
+            separation_row_right = self.__row_to_ascii(
                 left_edge=self.__style.left_and_right_edge,
                 heading_col_sep=self.__style.heading_col_sep,
                 column_seperator=self.__style.col_sep,
                 right_edge=self.__style.left_and_right_edge,
                 filler=row,
             )
-            for row in body
-        )
+            
+            if self.size - self.row_size > self.__max_size:
+                self.size = size_before
+                tables.append(separation_row_left.join(separation_row_right))
+            else:    
+                tables[-1] += separation_row_left.join(separation_row_right)
 
-    def to_ascii(self) -> str:
+        return tables
+
+    def to_ascii(self) -> list:
         """
         Generates a formatted ASCII table
 
         Returns:
             str: The generated ASCII table
         """
+        result = []
         # top row of table
-        table = self.__top_edge_to_ascii()
+        top_edge = self.__top_edge_to_ascii()
         # add table header
         if self.__header:
-            table += self.__heading_row_to_ascii(self.__header)
-            table += self.__heading_sep_to_ascii()
+            header = self.__heading_row_to_ascii(self.__header)
+            header_sep = self.__heading_sep_to_ascii()
         # add table body
         if self.__body:
-            table += self.__body_to_ascii(self.__body)
-        # add table footer
-        if self.__footer:
-            table += self.__heading_sep_to_ascii()
-            table += self.__heading_row_to_ascii(self.__footer)
-        # bottom row of table
-        table += self.__bottom_edge_to_ascii()
-        # reurn ascii table
-        return table.strip("\n")
+            bodies = self.__body_to_ascii(self.__body)
+            for body in bodies:
+                if body == bodies[0]:
+                    table = top_edge + header + header_sep + body
+                else:
+                    table = body
+                    #table = header_sep + body 
+                ## add table footer
+                #if self.__footer:
+                #    body += self.__heading_sep_to_ascii()
+                #    body += self.__heading_row_to_ascii(self.__footer)
+                if body == bodies[-1]:
+                    # bottom row of table
+                    table += (self.__bottom_edge_to_ascii()).strip("\n")
+                result.append(table)
+        else:
+            result = []
+
+        # return ascii table
+        return result
 
 
 def table2ascii(
@@ -319,7 +348,8 @@ def table2ascii(
     column_widths: Optional[List[Optional[int]]] = None,
     alignments: Optional[List[Alignment]] = None,
     style: TableStyle = PresetStyle.double_thin_compact,
-) -> str:
+    max_size: int = 0,
+) -> list:
     """
     Convert a 2D Python table to ASCII text
 
@@ -344,7 +374,7 @@ def table2ascii(
             Defaults to :data:`PresetStyle.double_thin_compact`.
 
     Returns:
-        :class:`str`: The generated ASCII table
+        :class:`list`: The generated ASCII table
     """
     return TableToAscii(
         header,
@@ -356,5 +386,6 @@ def table2ascii(
             column_widths=column_widths,
             alignments=alignments,
             style=style,
+            max_size=max_size
         ),
     ).to_ascii()
